@@ -1,0 +1,71 @@
+version: '3'
+
+services:
+  postgres:
+    container_name: 'postgres'
+    image: 'postgres:11-alpine'
+    ports:
+      - '5432:5432'
+    volumes:
+      - pgdata:/var/lib/postgresql/data
+    networks:
+      - coins_network
+    env_file: ../local/postgres.env
+
+  redis:
+    container_name: 'redis'
+    image: 'redis:latest'
+    ports:
+      - '6379:6379'
+    volumes:
+      - 'redisdata:/data'
+    networks:
+      - coins_network
+    entrypoint: redis-server --appendonly yes
+    restart: always
+
+  coins:
+    image: coins-app
+    build:
+      context: ..
+      dockerfile: Dockerfile
+    volumes:
+      - ../:/opt/app/
+    expose:
+      - "8000"
+    links:
+      - postgres:postgres_api
+    env_file:
+      - ../local/django.env # for local AWS creds. Using VeraCrypt secure volume.
+      - ../local/postgres.env
+    depends_on:
+      - redis
+    working_dir: /opt/app
+    networks:
+      - coins_network
+    external_links:
+      - redis:redis
+
+  proxy:
+    image: nginx:latest
+    networks:
+      - coins_network
+    ports:
+      - "8002:8002"
+    links:
+      - coins:app
+    volumes:
+      - ../local/nginx.conf:/etc/nginx/nginx.conf:ro
+      - ../static:/opt/app/static
+      - ../media:/opt/app/media
+    command: nginx -g 'daemon off';
+
+
+volumes:
+  pgdata:
+    external: true
+  redisdata:
+
+networks:
+  coins_network:
+    external: true
